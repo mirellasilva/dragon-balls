@@ -3,6 +3,7 @@ from scipy.optimize import minimize
 import geopandas as gpd
 from shapely.geometry import Point, Polygon, MultiPolygon
 from math import radians, cos, sin, asin, sqrt
+import fiona
 
 def calculateDistancePair(lat1, lon1, lat2, lon2):
     # The math module contains a function named
@@ -75,26 +76,13 @@ def isLand(gdf, latitude, longitude):
         return False
 
 
-# Function to calculate the total distance between all points
-def total_distance_land0(positions):
-  gdf = gpd.read_file('ne_10m_land')
-  # Calculate geometric distance matrix
-  #distance_matrix = distance_matrix(positions)
-  distance_sum = calculate_total_distance(positions) #distance_matrix[distance_matrix.triu(k=1)].sum()
-
-  # Loop through each ball position
-  for i, position in enumerate(positions):
-    # Check if position falls on water (using land_mask)
-    if isLand(gdf, position[1], position[0]) == False:
-      # Add a penalty (adjustable) if on water
-      distance_sum += 1000
-
-  return -distance_sum
-
-
-
 def total_distance_land(positions):
-    gdf = gpd.read_file('ne_10m_land')
+    gdf = []
+    try:
+      gdf = gpd.read_file('ne_10m_land')
+    except OSError as error:
+      sys.exit(error)
+      return
     # Reshape positions to separate the fixed first point
     fixed_point = [-12.3084, -55.452]  # Separate first point (longitude, latitude)
     merged_positions = fixed_point + positions.tolist()
@@ -104,12 +92,21 @@ def total_distance_land(positions):
     # Calculate distances using variable positions and the fixed first point
     # distance_matrix = distance_matrix(variable_positions, np.array([fixed_point]))
     distance_sum = calculate_total_distance(merged_positions)
-    
+    distance_sum_original = distance_sum
+    all_land = gdf.unary_union
+    distance = 0
     # Check for land and impose penalty only for variable positions
     for i, position in enumerate(variable_positions):
-        if isLand(gdf, position[1], position[0]) == False:
-            distance_sum += 20016
-    print("\ndistance_sum", distance_sum)
+      point = Point(position[1], position[0])
+      distance = point.distance(all_land)
+      # if isLand(gdf, position[1], position[0]) == False:
+      distance_sum += distance * (-200000)
+      if distance > 0:
+        break
+
+    print("\ndistance_sum original e diferença: ", distance_sum_original, distance_sum - distance_sum_original)
+    if distance_sum_original > 22000 and distance_sum - distance_sum_original > -1:
+      print("\nsolution: ", variable_positions)
     return -distance_sum
 
 
@@ -117,8 +114,9 @@ def total_distance_land(positions):
 num_balls = 7
 
 # Define initial guess (can be random or based on heuristics)
-initial_guess = [51.5553, -105.8189, 2.710676, 24.786559, 61.38768, 69.271557,
-                 -24.20024, 129.457487, 35.87418, 138.210087, -80.8930102, 62.33244603]
+#initial_guess = [51.5553, -105.8189, 2.710676, 24.786559, 61.38768, 69.271557, -24.20024, 129.457487, 35.87418, 138.210087, -80.8930102, 62.33244603]
+#initial_guess = [2.02173223, 24.38317631, 61.85332409, 70.09937284, -24.61042638, 130.27410599, 34.61215877, 138.85872568, -81.04121963, 62.33010985]
+initial_guess = [-0.12716669704727976, 25.441026173546152] * 6
 
 # You can replace this with your preferred initial guess generation method
 # For example, placing points on a cube inscribed within the sphere
